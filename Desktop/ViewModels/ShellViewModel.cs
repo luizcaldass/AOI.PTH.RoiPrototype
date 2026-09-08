@@ -2,6 +2,8 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
+using System.Windows.Media.Imaging;
+using AOI.PTH.Desktop.Recipes;
 
 namespace AOI.PTH.Desktop.ViewModels;
 
@@ -61,7 +63,7 @@ public sealed class ShellViewModel : Observable
         new("\uE716", "Perfis e acesso", "Responsabilidades de operação, engenharia e administração.")];
     public UserRole[] Roles { get; } = Enum.GetValues<UserRole>();
     private int page;
-    public int Page { get => page; set { if (value < 0 || value >= Navigation.Count) return; page = value; Changed(); Changed(nameof(Title)); Changed(nameof(Subtitle)); } }
+    public int Page { get => page; set { if (value < 0 || value >= Navigation.Count) return; page = value; Changed(); Changed(nameof(Title)); Changed(nameof(Subtitle)); Changed(nameof(ShowRecipeWorkspace)); } }
     public string Title => Navigation[Page].Title;
     public string Subtitle => Navigation[Page].Subtitle;
     private UserRole role;
@@ -86,7 +88,37 @@ public sealed class ShellViewModel : Observable
     private bool completed;
     public bool Completed { get => completed; private set { completed = value; Changed(); Changed(nameof(CycleLabel)); Refresh(); } }
     public string CycleLabel => Completed ? "Demonstração encerrada" : "Aguardando revisão • simulação";
-    public ObservableCollection<RecipeRow> Recipes { get; } = [new("FONTE-24V • exemplo", "B / v1", "24 ROIs", "Demonstração"),new("CONTROLE-PTH • exemplo", "A / v2", "36 ROIs", "Rascunho fictício")];
+    public ObservableCollection<LocalRecipe> Recipes { get; } = [];
+    public event Action<string>? RecipeActionRequested;
+    private LocalRecipe? selectedRecipe;
+    public LocalRecipe? SelectedRecipe { get => selectedRecipe; set { selectedRecipe = value; Changed(); Refresh(); } }
+    private bool recipeBusy;
+    public bool RecipeBusy { get => recipeBusy; set { recipeBusy = value; Changed(); Changed(nameof(RecipeReady)); Refresh(); } }
+    public bool RecipeReady => !RecipeBusy;
+    public LocalRecipe? ActiveRecipe { get; private set; }
+    public bool HasActiveRecipe => ActiveRecipe is not null;
+    public bool ShowDemo => !HasActiveRecipe;
+    public bool ShowRecipeWorkspace => Page == 0 && HasActiveRecipe;
+    public string ActiveRecipeLabel => ActiveRecipe?.Display ?? "Nenhuma receita real ativa • demonstração";
+    public ObservableCollection<RecipeRoi> ActiveRois { get; } = [];
+    private RecipeRoi? selectedActiveRoi;
+    public RecipeRoi? SelectedActiveRoi { get => selectedActiveRoi; set { selectedActiveRoi = value; Changed(); } }
+    public BitmapSource? RecipeImage { get; private set; }
+    public BitmapSource? CleanReference { get; private set; }
+    public BitmapSource? AssembledReference { get; private set; }
+    public string PhotoStatus { get; private set; } = "Referência montada alinhada • carregue uma foto para conferir as ROIs.";
+    public RelayCommand ActivateRecipe { get; }
+    public RelayCommand LoadTestPhoto { get; }
+    public void SetActive(LocalRecipe item, RecipeFiles files)
+    {
+        ActiveRecipe = item; ActiveRois.Clear(); foreach (var roi in files.Document.Rois) ActiveRois.Add(roi);
+        SelectedActiveRoi = ActiveRois.FirstOrDefault();
+        RecipeImage = AssembledReference = RecipeImages.Bitmap(files.Assembled); CleanReference = RecipeImages.Bitmap(files.Clean);
+        PhotoStatus = "Referência montada alinhada • nenhum julgamento automático foi realizado.";
+        foreach (var name in new[] { nameof(HasActiveRecipe), nameof(ShowDemo), nameof(ShowRecipeWorkspace), nameof(ActiveRecipeLabel), nameof(RecipeImage), nameof(CleanReference), nameof(AssembledReference), nameof(PhotoStatus) }) Changed(name);
+        Page = 0; Refresh();
+    }
+    public void SetTestPhoto(BitmapSource image, string status) { RecipeImage = image; PhotoStatus = status; Changed(nameof(RecipeImage)); Changed(nameof(PhotoStatus)); }
     public ObservableCollection<DefectRow> Defects { get; } = [new("D001", "Componente ausente", "Presença / ausência", "Planejado"),new("D002", "Jumper ausente", "Geometria da região", "Planejado"),new("D003", "Componente deslocado", "Posição e contorno", "Planejado"),new("D004", "Componente invertido", "Orientação / marcação", "Planejado")];
     public ObservableCollection<HistoryRow> History { get; } = [new("DEMO-0003", "FONTE-24V", "10:42", "Revisão pendente", "Operador demo"),new("DEMO-0002", "FONTE-24V", "10:41", "Reprovada • exemplo", "Operador demo"),new("DEMO-0001", "FONTE-24V", "10:40", "Aprovada • exemplo", "Operador demo")];
     public ObservableCollection<PermissionRow> Permissions { get; } = [new("Inspecionar e julgar", "Permitido", "Permitido", "Permitido"),new("Consultar histórico e produção", "Permitido", "Permitido", "Permitido"),new("Importar / editar receitas", "Consulta", "Permitido", "Permitido"),new("Editar catálogo de defeitos", "Consulta", "Permitido", "Permitido"),new("Configurar servidor e estação", "Consulta", "Consulta", "Permitido"),new("Gerenciar usuários e perfis", "Consulta", "Consulta", "Permitido")];
@@ -105,17 +137,19 @@ public sealed class ShellViewModel : Observable
     {
         Navigate = new(p => Page = Convert.ToInt32(p));
         Placeholder = new(p => PendingIntegration(p?.ToString() ?? "Ação"));
-        EditRecipe = new(p => PendingIntegration(p?.ToString() ?? "Editar receita"), _ => CanEdit && !IsDraftInProgress);
+        EditRecipe = new(p => RecipeActionRequested?.Invoke(p?.ToString() ?? "Criar receita"), p => CanEdit && !IsDraftInProgress && !RecipeBusy && (p is null || p?.ToString() is "Criar receita" or "Importar receita" || SelectedRecipe is not null));
+        ActivateRecipe = new(_ => RecipeActionRequested?.Invoke("Ativar receita"), _ => !IsDraftInProgress && !RecipeBusy && SelectedRecipe is not null);
+        LoadTestPhoto = new(_ => RecipeActionRequested?.Invoke("Carregar foto de teste"), _ => HasActiveRecipe && !RecipeBusy);
         EditDefect = new(_ => PendingIntegration("Editar catálogo"), _ => CanEdit);
         Configure = new(_ => PendingIntegration("Salvar configuração"), _ => IsAdmin);
         ManageUsers = new(_ => PendingIntegration("Cadastrar usuário"), _ => IsAdmin);
-        Judge = new(p => SetDecision(p?.ToString() == "Aceitável" ? "Aceitável" : "Defeito"), _ => !Completed);
-        CancelJudgment = new(_ => SetDecision("Pendente"), _ => !Completed && Selected.Decision != "Pendente");
-        Finish = new(_ => { Completed = true; Notice = "Demonstração finalizada. Nenhum resultado foi gravado e nenhum contador de produção foi alterado."; }, _ => !Completed && Pending == 0);
-        ResetDemo = new(_ => { foreach (var c in Components) c.Decision = "Pendente"; Completed = false; Selected = Components[0]; UpdateCounts(); Notice = "Demonstração reiniciada. Selecione cada componente para simular seu julgamento."; });
+        Judge = new(p => SetDecision(p?.ToString() == "Aceitável" ? "Aceitável" : "Defeito"), _ => !Completed && !HasActiveRecipe);
+        CancelJudgment = new(_ => SetDecision("Pendente"), _ => !Completed && !HasActiveRecipe && Selected.Decision != "Pendente");
+        Finish = new(_ => { Completed = true; Notice = "Demonstração finalizada. Nenhum resultado foi gravado e nenhum contador de produção foi alterado."; }, _ => !Completed && !HasActiveRecipe && Pending == 0);
+        ResetDemo = new(_ => { ActiveRecipe = null; RecipeImage = CleanReference = AssembledReference = null; ActiveRois.Clear(); foreach (var name in new[] { nameof(HasActiveRecipe), nameof(ShowDemo), nameof(ShowRecipeWorkspace), nameof(ActiveRecipeLabel) }) Changed(name); foreach (var c in Components) c.Decision = "Pendente"; Completed = false; Selected = Components[0]; UpdateCounts(); Notice = "Demonstração reiniciada. Selecione cada componente para simular seu julgamento."; }, _ => !RecipeBusy);
     }
     // UI prototype only: a real session/authorization service replaces the role selector later.
-    private bool IsDraftInProgress => !Completed && Components.Any(x => x.Decision != "Pendente");
+    private bool IsDraftInProgress => !HasActiveRecipe && !Completed && Components.Any(x => x.Decision != "Pendente");
     private void SetDecision(string value) { Selected.Decision = value; Changed(nameof(Selected)); UpdateCounts(); Notice = $"{Selected.Reference}: {value}. Rascunho de demonstração; nada foi salvo no banco."; }
     private void UpdateCounts() { Changed(nameof(Pending)); Changed(nameof(PendingLabel)); Refresh(); }
     private void PendingIntegration(string action) => Notice = $"{action}: integração prevista para a próxima etapa. Nenhum arquivo, banco ou equipamento foi alterado.";
@@ -123,5 +157,6 @@ public sealed class ShellViewModel : Observable
     {
         EditRecipe?.Refresh(); EditDefect?.Refresh(); Configure?.Refresh(); ManageUsers?.Refresh();
         Judge?.Refresh(); CancelJudgment?.Refresh(); Finish?.Refresh();
+        ActivateRecipe?.Refresh(); LoadTestPhoto?.Refresh(); ResetDemo?.Refresh();
     }
 }

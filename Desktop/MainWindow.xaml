@@ -32,7 +32,7 @@
     <DockPanel Margin="12,22,12,18">
      <StackPanel DockPanel.Dock="Bottom" Margin="12,0">
       <Border Background="#163D69" CornerRadius="6" Padding="12"><StackPanel><TextBlock Text="PROTÓTIPO DE INTERFACE" FontSize="10" Foreground="#B8D5F7" FontWeight="SemiBold"/><TextBlock Text="Fotos • operação offline" Foreground="White" FontSize="12" Margin="0,6,0,0"/><TextBlock Text="Sem câmera ou conexão SQL" Foreground="#B8CBE1" FontSize="10" Margin="0,4,0,0"/></StackPanel></Border>
-      <TextBlock Text="AOI PTH  /  v0.2" Foreground="#91ABC9" FontSize="10" Margin="0,18,0,0"/>
+      <TextBlock Text="AOI PTH  /  v0.3" Foreground="#91ABC9" FontSize="10" Margin="0,18,0,0"/>
      </StackPanel>
      <TextBlock DockPanel.Dock="Top" Text="ÁREA DE TRABALHO" Foreground="#91ABC9" FontSize="10" FontWeight="SemiBold" Margin="14,0,0,14"/>
      <ListBox ItemsSource="{Binding Navigation}" SelectedIndex="{Binding Page}" BorderThickness="0" Background="Transparent" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VerticalAlignment="Top">
@@ -48,11 +48,12 @@
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
     <Grid Margin="0,0,0,16"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
      <StackPanel><TextBlock Text="{Binding Title}" FontSize="27" FontWeight="SemiBold"/><TextBlock Text="{Binding Subtitle}" Foreground="{StaticResource Muted}" Margin="0,5,0,0"/></StackPanel>
-     <Border Grid.Column="1" Background="#FFF3DC" CornerRadius="5" Padding="10,6" VerticalAlignment="Top" Margin="12,5,0,0"><TextBlock Text="DADOS DEMONSTRATIVOS" Foreground="#85540B" FontSize="10" FontWeight="SemiBold"/></Border>
+     <Border Grid.Column="1" Background="#FFF3DC" CornerRadius="5" Padding="10,6" VerticalAlignment="Top" Margin="12,5,0,0"><TextBlock Text="TESTES OFFLINE • PERFIS DEMO" Foreground="#85540B" FontSize="10" FontWeight="SemiBold"/></Border>
     </Grid>
     <Border Grid.Row="1" Background="#E8F0FA" CornerRadius="5" Padding="12,8" Margin="0,0,0,16"><TextBlock Text="{Binding RoleNotice}" Foreground="{StaticResource Brand}" FontSize="11"/></Border>
     <Grid Grid.Row="2">
-     <views:InspectionView><views:InspectionView.Style><Style TargetType="views:InspectionView"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Page}" Value="0"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></views:InspectionView.Style></views:InspectionView>
+     <views:InspectionView><views:InspectionView.Style><Style TargetType="views:InspectionView"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><MultiDataTrigger><MultiDataTrigger.Conditions><Condition Binding="{Binding Page}" Value="0"/><Condition Binding="{Binding ShowDemo}" Value="True"/></MultiDataTrigger.Conditions><Setter Property="Visibility" Value="Visible"/></MultiDataTrigger></Style.Triggers></Style></views:InspectionView.Style></views:InspectionView>
+     <views:RecipeWorkspaceView Visibility="{Binding ShowRecipeWorkspace, Converter={StaticResource BoolVisibility}}"/>
      <views:ManagementView/>
     </Grid>
     <Border Grid.Row="3" BorderThickness="3,0,0,0" BorderBrush="#6999CE" Background="#EAF0F7" Padding="10,8" Margin="0,12,0,0"><TextBlock Text="{Binding Notice}" FontSize="11" Foreground="#385778" AutomationProperties.LiveSetting="Polite"/></Border>
@@ -61,7 +62,7 @@
   <Border Grid.Row="2" Background="White" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="18,0">
    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
     <TextBlock Text="●  SQL Server: não configurado     |     Envios: não integrados     |     Disco: não monitorado" FontSize="10" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/>
-    <TextBlock Grid.Column="1" Text="FONTE-24V  /  Rev. B  /  Receita demo" FontSize="10" Foreground="{StaticResource Brand}" VerticalAlignment="Center"/>
+    <TextBlock Grid.Column="1" Text="{Binding ActiveRecipeLabel}" MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" FontSize="10" Foreground="{StaticResource Brand}" VerticalAlignment="Center"/>
    </Grid>
   </Border>
  </Grid>
