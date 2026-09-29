@@ -8,7 +8,7 @@ A interface WPF está na subpasta `Desktop`, no mesmo projeto de trabalho. Reque
 dotnet run --project .\Desktop\AOI.PTH.Desktop.csproj
 ```
 
-Consulte `Desktop/README.md` para os perfis, navegação e limites desta demonstração. O console descrito abaixo permanece em .NET 8, sem mudança no algoritmo de visão.
+Consulte `Desktop/README.md` para o login, perfis configuráveis, ciclo de receitas e limites da comparação offline. O console descrito abaixo permanece em .NET 8, sem mudança no algoritmo de visão.
 
 Primeira etapa do projeto de inspeção óptica automática, executada somente com duas fotografias:
 
@@ -61,7 +61,7 @@ dotnet run -- .\Images\placa_limpa.jpg .\Images\placa_montada.jpg .\resultado `
 
 O programa interrompe a geração quando há poucos pontos correspondentes, poucos *inliers* ou erro de reprojeção alto. Nesse caso o processo retorna `ERROR`; ele não inventa ROIs e não considera a placa aprovada.
 
-As caixas desta fase são **ROIs candidatas**, não uma decisão de qualidade. Depois de revisar e ajustar as caixas com as imagens reais, elas formarão uma receita de PCB. A próxima fase compara cada ROI de uma placa em teste com as referências montada e vazia e classifica `PRESENTE`, `AUSENTE` ou `REVISÃO MANUAL`.
+As caixas desta fase são **ROIs candidatas**, não uma decisão de qualidade. Depois de revisar e ajustar as caixas com as imagens reais, elas formarão uma receita de PCB. A interface desktop oferece comparação experimental por ROI, ainda sujeita à calibração com fotos reais, e classifica `PRESENTE`, `AUSENTE` ou `REVISÃO MANUAL`.
 
 ## Limites desta primeira versão
 

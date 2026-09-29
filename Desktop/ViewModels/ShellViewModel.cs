@@ -1,3 +1,4 @@
+using AOI.PTH.Desktop.Security;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -21,19 +22,7 @@ public sealed class RelayCommand(Action<object?> execute, Predicate<object?>? al
     public void Refresh() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
 }
 
-public enum UserRole { Operador, Engenharia, Administrador }
-public enum Permission { Inspect, EditRecipes, EditDefects, Configure, ManageUsers }
-public static class RolePolicy
-{
-    public static bool Allows(UserRole role, Permission permission) => permission switch
-    {
-        Permission.Inspect => true,
-        Permission.EditRecipes or Permission.EditDefects => role is UserRole.Engenharia or UserRole.Administrador,
-        Permission.Configure or Permission.ManageUsers => role is UserRole.Administrador,
-        _ => false
-    };
-}
-public sealed record NavigationItem(string Glyph, string Title, string Subtitle);
+public sealed record NavigationItem(string Glyph, string Title, string Subtitle, bool Allowed = false);
 public sealed record RecipeRow(string Code, string Revision, string Components, string State);
 public sealed record DefectRow(string Code, string Name, string Method, string State);
 public sealed record HistoryRow(string Pci, string Model, string Time, string Result, string Operator);
@@ -61,20 +50,22 @@ public sealed class ShellViewModel : Observable
         new("\uE9D2", "Produção", "Acompanhe placas únicas e resultados da estação."),
         new("\uE713", "Configurações", "Estação, servidor, armazenamento e sincronização."),
         new("\uE716", "Perfis e acesso", "Responsabilidades de operação, engenharia e administração.")];
-    public UserRole[] Roles { get; } = Enum.GetValues<UserRole>();
+    public AccessService Access { get; }
     private int page;
-    public int Page { get => page; set { if (value < 0 || value >= Navigation.Count) return; page = value; Changed(); Changed(nameof(Title)); Changed(nameof(Subtitle)); Changed(nameof(ShowRecipeWorkspace)); } }
-    public string Title => Navigation[Page].Title;
-    public string Subtitle => Navigation[Page].Subtitle;
-    private UserRole role;
-    public UserRole Role
+    public int Page { get => page; set { if (value < 0 || value >= Navigation.Count || !Access.Can(AccessRules.View(AccessRules.Pages[value]))) return; page = value; Changed(); Changed(nameof(Title)); Changed(nameof(Subtitle)); Changed(nameof(ShowRecipeWorkspace)); } }
+    public string Title => page >= 0 ? Navigation[page].Title : "Sem acesso";
+    public string Subtitle => page >= 0 ? Navigation[page].Subtitle : "Solicite acesso ao administrador.";
+    public bool CanEdit => Access.Can("recipe.create") || Access.Can("recipe.edit");
+    public bool IsAdmin => Access.Can("settings.edit");
+    public string RoleNotice => $"{Access.LoginName} • {Access.ProfileName}";
+    public event Action? AccessManagementRequested;
+    public void RefreshAccess()
     {
-        get => role;
-        set { role = value; Changed(); Changed(nameof(CanEdit)); Changed(nameof(IsAdmin)); Changed(nameof(RoleNotice)); Refresh(); Notice = $"Perfil de demonstração: {role}. Autenticação real ainda não integrada."; }
+        for (int i = 0; i < Navigation.Count; i++) Navigation[i] = Navigation[i] with { Allowed = Access.Can(AccessRules.View(AccessRules.Pages[i])) };
+        if (page < 0 || !Navigation[page].Allowed) { page = Navigation.ToList().FindIndex(n => n.Allowed); Changed(nameof(Page)); }
+        foreach (var name in new[] { nameof(Title), nameof(Subtitle), nameof(CanEdit), nameof(IsAdmin), nameof(RoleNotice), nameof(ShowRecipeWorkspace) }) Changed(name);
+        Refresh();
     }
-    public bool CanEdit => RolePolicy.Allows(Role, Permission.EditRecipes);
-    public bool IsAdmin => RolePolicy.Allows(Role, Permission.Configure);
-    public string RoleNotice => IsAdmin ? "Administrador • configuração e gestão de acessos" : CanEdit ? "Engenharia • edição de receitas e catálogo" : "Operador • inspeção e julgamento; cadastros em consulta";
     public ObservableCollection<ComponentItem> Components { get; } = [
         new("JP3", "Jumper • suspeita de ausência", 31, 89, 42, 0),
         new("R12", "Resistor • aparência divergente", 72, 48, 18, 1),
@@ -107,11 +98,12 @@ public sealed class ShellViewModel : Observable
     public BitmapSource? CleanReference { get; private set; }
     public BitmapSource? AssembledReference { get; private set; }
     public string PhotoStatus { get; private set; } = "Referência montada alinhada • carregue uma foto para conferir as ROIs.";
+    public ObservableCollection<RoiAssessment> Assessments { get; } = [];
     public RelayCommand ActivateRecipe { get; }
     public RelayCommand LoadTestPhoto { get; }
     public void SetActive(LocalRecipe item, RecipeFiles files)
     {
-        ActiveRecipe = item; ActiveRois.Clear(); foreach (var roi in files.Document.Rois) ActiveRois.Add(roi);
+        Assessments.Clear(); ActiveRecipe = item; ActiveRois.Clear(); foreach (var roi in files.Document.Rois) ActiveRois.Add(roi);
         SelectedActiveRoi = ActiveRois.FirstOrDefault();
         RecipeImage = AssembledReference = RecipeImages.Bitmap(files.Assembled); CleanReference = RecipeImages.Bitmap(files.Clean);
         PhotoStatus = "Referência montada alinhada • nenhum julgamento automático foi realizado.";
@@ -133,22 +125,24 @@ public sealed class ShellViewModel : Observable
     public RelayCommand Finish { get; }
     public RelayCommand ResetDemo { get; }
 
-    public ShellViewModel()
+    public ShellViewModel(AccessService access)
     {
+        Access = access;
         Navigate = new(p => Page = Convert.ToInt32(p));
         Placeholder = new(p => PendingIntegration(p?.ToString() ?? "Ação"));
-        EditRecipe = new(p => RecipeActionRequested?.Invoke(p?.ToString() ?? "Criar receita"), p => CanEdit && !IsDraftInProgress && !RecipeBusy && (p is null || p?.ToString() is "Criar receita" or "Importar receita" || SelectedRecipe is not null));
-        ActivateRecipe = new(_ => RecipeActionRequested?.Invoke("Ativar receita"), _ => !IsDraftInProgress && !RecipeBusy && SelectedRecipe is not null);
-        LoadTestPhoto = new(_ => RecipeActionRequested?.Invoke("Carregar foto de teste"), _ => HasActiveRecipe && !RecipeBusy);
-        EditDefect = new(_ => PendingIntegration("Editar catálogo"), _ => CanEdit);
+        EditRecipe = new(p => RecipeActionRequested?.Invoke(p?.ToString() ?? "Criar receita"), p => Access.Can(AccessRules.RecipeAction(p?.ToString() ?? "Criar receita")) && !IsDraftInProgress && !RecipeBusy && (p is null || p?.ToString() is "Criar receita" or "Importar receita" || SelectedRecipe is not null));
+        ActivateRecipe = new(_ => RecipeActionRequested?.Invoke("Ativar receita"), _ => Access.Can("recipe.activate") && !IsDraftInProgress && !RecipeBusy && SelectedRecipe is not null);
+        LoadTestPhoto = new(_ => RecipeActionRequested?.Invoke("Carregar foto de teste"), _ => Access.Can("inspection.photo") && HasActiveRecipe && !RecipeBusy);
+        EditDefect = new(_ => PendingIntegration("Editar catálogo"), _ => Access.Can("defects.edit"));
         Configure = new(_ => PendingIntegration("Salvar configuração"), _ => IsAdmin);
-        ManageUsers = new(_ => PendingIntegration("Cadastrar usuário"), _ => IsAdmin);
-        Judge = new(p => SetDecision(p?.ToString() == "Aceitável" ? "Aceitável" : "Defeito"), _ => !Completed && !HasActiveRecipe);
-        CancelJudgment = new(_ => SetDecision("Pendente"), _ => !Completed && !HasActiveRecipe && Selected.Decision != "Pendente");
-        Finish = new(_ => { Completed = true; Notice = "Demonstração finalizada. Nenhum resultado foi gravado e nenhum contador de produção foi alterado."; }, _ => !Completed && !HasActiveRecipe && Pending == 0);
-        ResetDemo = new(_ => { ActiveRecipe = null; RecipeImage = CleanReference = AssembledReference = null; ActiveRois.Clear(); foreach (var name in new[] { nameof(HasActiveRecipe), nameof(ShowDemo), nameof(ShowRecipeWorkspace), nameof(ActiveRecipeLabel) }) Changed(name); foreach (var c in Components) c.Decision = "Pendente"; Completed = false; Selected = Components[0]; UpdateCounts(); Notice = "Demonstração reiniciada. Selecione cada componente para simular seu julgamento."; }, _ => !RecipeBusy);
+        ManageUsers = new(_ => AccessManagementRequested?.Invoke(), _ => Access.Can("access.manage"));
+        Judge = new(p => SetDecision(p?.ToString() == "Aceitável" ? "Aceitável" : "Defeito"), _ => Access.Can("inspection.judge") && !Completed && !HasActiveRecipe);
+        CancelJudgment = new(_ => SetDecision("Pendente"), _ => Access.Can("inspection.cancel") && !Completed && !HasActiveRecipe && Selected.Decision != "Pendente");
+        Finish = new(_ => { Completed = true; Notice = "Demonstração finalizada. Nenhum resultado foi gravado e nenhum contador de produção foi alterado."; }, _ => Access.Can("inspection.finish") && !Completed && !HasActiveRecipe && Pending == 0);
+        ResetDemo = new(_ => { Assessments.Clear(); ActiveRecipe = null; RecipeImage = CleanReference = AssembledReference = null; ActiveRois.Clear(); foreach (var name in new[] { nameof(HasActiveRecipe), nameof(ShowDemo), nameof(ShowRecipeWorkspace), nameof(ActiveRecipeLabel) }) Changed(name); foreach (var c in Components) c.Decision = "Pendente"; Completed = false; Selected = Components[0]; UpdateCounts(); Notice = "Demonstração reiniciada. Selecione cada componente para simular seu julgamento."; }, _ => Access.Can("inspection.reset") && !RecipeBusy);
+        RefreshAccess();
     }
-    // UI prototype only: a real session/authorization service replaces the role selector later.
+    // Every command checks the current account and profile before execution.
     private bool IsDraftInProgress => !HasActiveRecipe && !Completed && Components.Any(x => x.Decision != "Pendente");
     private void SetDecision(string value) { Selected.Decision = value; Changed(nameof(Selected)); UpdateCounts(); Notice = $"{Selected.Reference}: {value}. Rascunho de demonstração; nada foi salvo no banco."; }
     private void UpdateCounts() { Changed(nameof(Pending)); Changed(nameof(PendingLabel)); Refresh(); }

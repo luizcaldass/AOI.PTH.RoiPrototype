@@ -5,7 +5,7 @@
    <StackPanel>
     <StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Page}" Value="1"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></StackPanel.Style>
     <Border Style="{StaticResource Card}"><StackPanel>
-     <DockPanel Margin="0,0,0,18"><StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Content="Importar .aoireceita" Command="{Binding EditRecipe}" CommandParameter="Importar receita" Margin="0,0,8,0"/><Button Content="+ Nova receita" Command="{Binding EditRecipe}" CommandParameter="Criar receita" Style="{StaticResource PrimaryButton}"/></StackPanel><StackPanel><TextBlock Text="Biblioteca local de modelos" Style="{StaticResource SectionTitle}"/><TextBlock Text="Receitas reais por imagens • selecione Engenharia para criar ou importar" Style="{StaticResource MutedText}"/></StackPanel></DockPanel>
+     <DockPanel Margin="0,0,0,18"><StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Content="Importar .aoireceita" Command="{Binding EditRecipe}" CommandParameter="Importar receita" Margin="0,0,8,0"/><Button Content="+ Nova receita" Command="{Binding EditRecipe}" CommandParameter="Criar receita" Style="{StaticResource PrimaryButton}"/></StackPanel><StackPanel><TextBlock Text="Biblioteca local de modelos" Style="{StaticResource SectionTitle}"/><TextBlock Text="Receitas reais por imagens • acesso conforme as permissões do seu perfil" Style="{StaticResource MutedText}"/></StackPanel></DockPanel>
      <DataGrid ItemsSource="{Binding Recipes}" SelectedItem="{Binding SelectedRecipe}" MinHeight="160"><DataGrid.Columns><DataGridTextColumn Header="MODELO" Binding="{Binding Code}" Width="*"/><DataGridTextColumn Header="REVISÃO / VERSÃO" Binding="{Binding Revision}" Width="140"/><DataGridTextColumn Header="REGIÕES" Binding="{Binding Components}" Width="110"/><DataGridTextColumn Header="ESTADO" Binding="{Binding State}" Width="180"/></DataGrid.Columns></DataGrid>
      <WrapPanel Margin="0,16,0,0"><Button Content="Usar receita" Command="{Binding ActivateRecipe}" Style="{StaticResource PrimaryButton}" Margin="0,0,8,8"/><Button Content="Editar / nova versão" Command="{Binding EditRecipe}" CommandParameter="Editor de ROIs" Margin="0,0,8,8"/><Button Content="Exportar .aoireceita" Command="{Binding EditRecipe}" CommandParameter="Exportar receita" Margin="0,0,8,8"/></WrapPanel>
     </StackPanel></Border>
@@ -14,7 +14,7 @@
      <Border Style="{StaticResource Card}" Margin="0,0,10,0"><StackPanel><TextBlock Text="02 / COMPONENTES" Style="{StaticResource Eyebrow}"/><TextBlock Text="ROIs e critérios" Style="{StaticResource SectionTitle}"/><TextBlock Text="Nome, região, método e limites individuais por componente." Style="{StaticResource MutedText}"/></StackPanel></Border>
      <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="03 / TESTE OFFLINE" Style="{StaticResource Eyebrow}"/><TextBlock Text="Receita revisada" Style="{StaticResource SectionTitle}"/><TextBlock Text="Versões preservadas e pacote exportável. A revisão das ROIs não libera produção." Style="{StaticResource MutedText}"/></StackPanel></Border>
     </UniformGrid>
-    <TextBlock Text="A biblioteca começa vazia. Crie ou importe uma receita; depois selecione Usar receita. A extração acontece na importação, não a cada PCI. O perfil continua demonstrativo, sem autenticação real." Style="{StaticResource MutedText}" Margin="4,18"/>
+    <TextBlock Text="A biblioteca começa vazia. Crie ou importe uma receita; depois selecione Usar receita. A extração acontece na importação, não a cada PCI. O acesso segue as permissões da conta autenticada." Style="{StaticResource MutedText}" Margin="4,18"/>
    </StackPanel>
    <StackPanel>
     <StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Page}" Value="2"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></StackPanel.Style>
@@ -53,10 +53,11 @@
    </StackPanel>
    <StackPanel>
     <StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Page}" Value="6"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></StackPanel.Style>
-    <Border Style="{StaticResource Card}"><StackPanel><DockPanel Margin="0,0,0,20"><Button DockPanel.Dock="Right" Content="+ Cadastrar usuário" Command="{Binding ManageUsers}" Style="{StaticResource PrimaryButton}"/><StackPanel><TextBlock Text="Hierarquia de permissões" Style="{StaticResource SectionTitle}"/><TextBlock Text="Operador → Engenharia → Administrador" Style="{StaticResource MutedText}"/></StackPanel></DockPanel>
-     <DataGrid ItemsSource="{Binding Permissions}" MinHeight="325"><DataGrid.Columns><DataGridTextColumn Header="AÇÃO" Binding="{Binding Action}" Width="*"/><DataGridTextColumn Header="OPERADOR" Binding="{Binding Operator}" Width="115"/><DataGridTextColumn Header="ENGENHARIA" Binding="{Binding Engineering}" Width="125"/><DataGridTextColumn Header="ADMINISTRADOR" Binding="{Binding Administrator}" Width="140"/></DataGrid.Columns></DataGrid>
+    <Border Style="{StaticResource Card}"><StackPanel>
+     <TextBlock Text="Usuários e perfis" Style="{StaticResource SectionTitle}"/>
+     <TextBlock Text="Cadastre logins e senhas numéricas. Em cada perfil, selecione as abas e ações permitidas. As permissões são verificadas ao executar os comandos." Style="{StaticResource MutedText}"/>
+     <Button Content="Gerenciar usuários e perfis" Command="{Binding ManageUsers}" HorizontalAlignment="Left" Margin="0,20,0,0" Style="{StaticResource PrimaryButton}"/>
     </StackPanel></Border>
-    <Border Background="#FFF3DC" Padding="18" CornerRadius="6" Margin="0,16,0,0"><StackPanel><TextBlock Text="Seleção de perfil apenas para demonstração" Foreground="#85540B" FontWeight="SemiBold"/><TextBlock Text="Use o seletor no topo para verificar os botões permitidos em cada perfil. Não existe login, validação de identidade ou proteção de dados real nesta versão. A autorização será aplicada também nos serviços quando forem integrados." Foreground="#85540B" FontSize="12" Margin="0,8,0,0"/></StackPanel></Border>
    </StackPanel>
   </Grid>
  </ScrollViewer>

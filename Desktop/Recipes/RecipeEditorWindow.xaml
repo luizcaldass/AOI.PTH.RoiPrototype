@@ -5,7 +5,7 @@
  FontFamily="Segoe UI" FontSize="13" Foreground="{StaticResource Ink}" Background="#F2F5F9" Closing="OnClosing">
  <Grid Margin="20" Background="#F2F5F9">
   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-  <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Criar / revisar receita" FontSize="25" FontWeight="SemiBold"/><TextBlock Text="Fotos PNG/JPEG • coordenadas na referência limpa • sem câmera" Style="{StaticResource MutedText}" Margin="0,4,0,16"/></StackPanel><TextBlock Grid.Column="1" Text="{Binding VersionLabel}" Foreground="{StaticResource Brand}" VerticalAlignment="Center"/></Grid>
+  <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Criar / revisar receita" FontSize="25" FontWeight="SemiBold"/><TextBlock Text="Limpa: geometria e ausência • Montada: presença • Original: regeneração • Máscara: cobertura válida" Style="{StaticResource MutedText}" Margin="0,4,0,16"/></StackPanel><TextBlock Grid.Column="1" Text="{Binding VersionLabel}" Foreground="{StaticResource Brand}" VerticalAlignment="Center"/></Grid>
   <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,0,0,14" Padding="14">
    <StackPanel IsEnabled="{Binding Ready}">
     <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="140"/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
@@ -30,13 +30,20 @@
     <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#101F30"><controls:RoiImageView x:Name="ImageCanvas" Source="{Binding Preview}" Rois="{Binding Rois}" Selected="{Binding Selected}" Width="700" Height="400"><controls:RoiImageView.LayoutTransform><ScaleTransform ScaleX="{Binding Value, ElementName=Zoom}" ScaleY="{Binding Value, ElementName=Zoom}"/></controls:RoiImageView.LayoutTransform></controls:RoiImageView></ScrollViewer>
     <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,0"><TextBlock Text="Zoom" VerticalAlignment="Center"/><Slider x:Name="Zoom" Minimum="0.5" Maximum="3" Value="0.8" Width="140" Margin="12,0"/><TextBlock Text="Arraste para criar. Edite posição e tamanho na tabela." FontSize="11" Foreground="{StaticResource Muted}" MaxWidth="330"/></StackPanel>
    </Grid></Border>
-   <Border Grid.Column="2" Style="{StaticResource Card}" Padding="12"><Grid IsEnabled="{Binding Ready}"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+   <Border Grid.Column="2" Style="{StaticResource Card}" Padding="12"><Grid IsEnabled="{Binding Ready}"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
     <TextBlock Text="ROIs • nomes e coordenadas editáveis" FontWeight="SemiBold" Margin="0,0,0,12"/>
     <DataGrid x:Name="RoiGrid" Grid.Row="1" ItemsSource="{Binding Rois}" SelectedItem="{Binding Selected}" IsReadOnly="False" CanUserSortColumns="False" RowHeight="34" CellEditEnding="RoiEdited" SelectionUnit="FullRow">
      <DataGrid.Resources><Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}"><Setter Property="Padding" Value="4"/></Style><Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}"><Setter Property="Padding" Value="4,10"/></Style></DataGrid.Resources>
      <DataGrid.Columns><DataGridCheckBoxColumn Header="Ativa" Binding="{Binding Enabled}" Width="50"/><DataGridTextColumn Header="Nome" Binding="{Binding Reference}" Width="80"/><DataGridTextColumn Header="X" Binding="{Binding X, ValidatesOnExceptions=True}" Width="50"/><DataGridTextColumn Header="Y" Binding="{Binding Y, ValidatesOnExceptions=True}" Width="50"/><DataGridTextColumn Header="L" Binding="{Binding Width, ValidatesOnExceptions=True}" Width="50"/><DataGridTextColumn Header="A" Binding="{Binding Height, ValidatesOnExceptions=True}" Width="50"/></DataGrid.Columns>
     </DataGrid>
-    <StackPanel Grid.Row="2"><Button Content="Remover ROI selecionada" Click="RemoveRoi" IsEnabled="{Binding HasPrepared}" Margin="0,12,0,8"/><TextBlock Text="Todas as medidas são pixels da referência limpa. L = largura; A = altura. As ROIs são candidatas: revise regiões unidas e componentes pequenos." Style="{StaticResource MutedText}"/></StackPanel>
+    <StackPanel Grid.Row="2" DataContext="{Binding Selected}" Margin="0,8,0,0">
+     <TextBlock Text="Critérios da ROI selecionada" FontWeight="SemiBold"/>
+     <UniformGrid Columns="2"><TextBlock Text="Cobertura mínima (0,90–1)"/><TextBox Text="{Binding MinimumCoverage, ValidatesOnExceptions=True, UpdateSourceTrigger=PropertyChanged}"/>
+     <TextBlock Text="Diferença mínima limpa/montada"/><TextBox Text="{Binding MinimumReferenceDifference, ValidatesOnExceptions=True, UpdateSourceTrigger=PropertyChanged}"/>
+     <TextBlock Text="Margem de decisão (0–1)"/><TextBox Text="{Binding DecisionMargin, ValidatesOnExceptions=True, UpdateSourceTrigger=PropertyChanged}"/>
+     <TextBlock Text="Distância máxima à referência"/><TextBox Text="{Binding MaximumMatchDifference, ValidatesOnExceptions=True, UpdateSourceTrigger=PropertyChanged}"/></UniformGrid>
+    </StackPanel>
+    <StackPanel Grid.Row="3"><Button Content="Remover ROI selecionada" Click="RemoveRoi" IsEnabled="{Binding HasPrepared}" Margin="0,12,0,8"/><TextBlock Text="Todas as medidas são pixels da referência limpa. L = largura; A = altura. As ROIs são candidatas: revise regiões unidas e componentes pequenos." Style="{StaticResource MutedText}"/></StackPanel>
    </Grid></Border>
   </Grid>
   <Border Grid.Row="3" Background="#E8F0FA" Padding="12" CornerRadius="5" Margin="0,14,0,12"><TextBlock Text="{Binding Message}" Foreground="{StaticResource Brand}"/></Border>

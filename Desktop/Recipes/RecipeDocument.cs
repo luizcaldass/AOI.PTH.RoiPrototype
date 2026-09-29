@@ -7,6 +7,11 @@ public sealed class RecipeRoi : Observable
     private string reference = "ROI1";
     private int x, y, width = 40, height = 40;
     private bool enabled = true;
+    private double minimumCoverage = .98, minimumReferenceDifference = 8, decisionMargin = .15, maximumMatchDifference = 35;
+    public double MinimumCoverage { get => minimumCoverage; set { minimumCoverage = value; Changed(); } }
+    public double MinimumReferenceDifference { get => minimumReferenceDifference; set { minimumReferenceDifference = value; Changed(); } }
+    public double DecisionMargin { get => decisionMargin; set { decisionMargin = value; Changed(); } }
+    public double MaximumMatchDifference { get => maximumMatchDifference; set { maximumMatchDifference = value; Changed(); } }
     public string Reference { get => reference; set { reference = value; Changed(); } }
     public int X { get => x; set { x = value; Changed(); } }
     public int Y { get => y; set { y = value; Changed(); } }

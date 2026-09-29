@@ -20,7 +20,8 @@ public sealed class RecipeEditorModel : Observable
     public string MergeDistance { get; set; } = "16";
     public string VersionLabel { get; set; } = "NOVA RECEITA • v1";
     public ObservableCollection<RecipeRoi> Rois { get; } = [];
-    public RecipeRoi? Selected { get; set; }
+    private RecipeRoi? selected;
+    public RecipeRoi? Selected { get => selected; set { selected = value; Changed(); } }
     private bool drawing;
     public bool Drawing { get => drawing; set { drawing = value; Changed(); } }
     private bool reviewed;
@@ -51,10 +52,11 @@ public partial class RecipeEditorWindow : Window
     private byte[]? clean, assembled;
     private Guid id = Guid.NewGuid();
     private int version = 1;
+    private readonly string author;
     public LocalRecipe? Saved { get; private set; }
-    public RecipeEditorWindow(RecipeStore store, Func<bool> allowed, RecipeFiles? existing = null, int nextVersion = 1)
+    public RecipeEditorWindow(RecipeStore store, Func<bool> allowed, RecipeFiles? existing = null, int nextVersion = 1, string author = "")
     {
-        InitializeComponent(); this.store = store; this.allowed = allowed;
+        InitializeComponent(); this.store = store; this.allowed = allowed; this.author = author;
         if (existing is not null)
         {
             prepared = existing; clean = existing.Clean; assembled = existing.OriginalAssembled; id = existing.Document.Id; version = nextVersion;
@@ -99,7 +101,7 @@ public partial class RecipeEditorWindow : Window
             Model.Message = "Imagem carregada. Clique em Alinhar e gerar ROIs para preparar as referências."; Model.Refresh();
         }
         catch (Exception ex) { Model.Message = "Não foi possível carregar a foto: " + ex.Message; }
-        finally { Model.Busy = false; }
+        finally { Model.Busy = false; ImageCanvas.AllowDrawing = Model.Drawing && Model.HasPrepared; }
     }
     private async void Generate(object sender, RoutedEventArgs args)
     {
@@ -126,20 +128,20 @@ public partial class RecipeEditorWindow : Window
     private async void Save(object sender, RoutedEventArgs args)
     {
         if (!allowed() || !Model.Ready || prepared is null) return;
-        if (!RoiGrid.CommitEdit(DataGridEditingUnit.Cell, true) || !RoiGrid.CommitEdit(DataGridEditingUnit.Row, true) || HasError(RoiGrid)) { Model.Message = "Corrija os campos inválidos na tabela de ROIs."; return; }
+        if (!RoiGrid.CommitEdit(DataGridEditingUnit.Cell, true) || !RoiGrid.CommitEdit(DataGridEditingUnit.Row, true) || HasError(this)) { Model.Message = "Corrija os campos inválidos na tabela de ROIs."; return; }
         try
         {
             if (Model.Settings() != prepared.Document.Generation) throw new InvalidDataException("Os parâmetros foram alterados. Gere as ROIs novamente antes de salvar.");
-            var document = new RecipeDocument { Id = id, Version = version, Model = Model.ModelName.Trim(), BoardRevision = Model.Revision.Trim(), Width = prepared.Document.Width, Height = prepared.Document.Height, Alignment = prepared.Document.Alignment, Generation = prepared.Document.Generation, RoiReviewConfirmed = Model.Reviewed, Rois = Model.Rois.ToList() };
+            var document = new RecipeDocument { Id = id, Version = version, Author = author, Model = Model.ModelName.Trim(), BoardRevision = Model.Revision.Trim(), Width = prepared.Document.Width, Height = prepared.Document.Height, Alignment = prepared.Document.Alignment, Generation = prepared.Document.Generation, RoiReviewConfirmed = Model.Reviewed, Rois = Model.Rois.ToList() };
             var files = prepared with { Document = document };
             RecipeStore.ValidateFiles(files);
             Model.Busy = true; ImageCanvas.AllowDrawing = false;
-            Saved = await Task.Run(() => store.Save(files));
+            Saved = await Task.Run(() => { if (!allowed()) throw new UnauthorizedAccessException("Permissão de edição revogada."); return store.Save(files); });
             Model.Busy = false;
             DialogResult = true;
         }
         catch (Exception ex) { Model.Message = "Receita não salva: " + ex.Message; }
-        finally { Model.Busy = false; }
+        finally { Model.Busy = false; ImageCanvas.AllowDrawing = Model.Drawing && Model.HasPrepared; }
     }
     private static bool HasError(DependencyObject obj)
     {

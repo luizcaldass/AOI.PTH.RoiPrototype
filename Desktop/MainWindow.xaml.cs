@@ -1,3 +1,4 @@
+using AOI.PTH.Desktop.Security;
 using System.Windows;
 using AOI.PTH.Desktop.ViewModels;
 using AOI.PTH.Desktop.Recipes;
@@ -5,18 +6,21 @@ using Microsoft.Win32;
 using System.IO;
 using AOI.PTH.RoiPrototype.Vision;
 using AOI.PTH.RoiPrototype.Options;
-using OpenCvSharp;
+
 
 namespace AOI.PTH.Desktop;
 
 public partial class MainWindow : Window
 {
-    public ShellViewModel Model { get; } = new();
+    public ShellViewModel Model { get; }
     private readonly RecipeStore recipeStore;
     private RecipeFiles? activeFiles;
-    public MainWindow(RecipeStore? store = null)
+    public MainWindow(AccessService access, RecipeStore? store = null)
     {
-        InitializeComponent(); DataContext = Model; recipeStore = store ?? new(RecipeStore.DefaultRoot);
+        Model = new(access);
+        InitializeComponent(); DataContext = Model; recipeStore = store ?? new(RecipeStore.DefaultRoot, access);
+        Model.AccessManagementRequested += () => { try { access.Demand("access.manage"); new AccessWindow(access) { Owner = this }.ShowDialog(); Model.RefreshAccess(); } catch (Exception ex) { Model.Notice = ex.Message; } };
+        Activated += (_, _) => Model.RefreshAccess();
         Model.RecipeActionRequested += RecipeAction;
         ReloadRecipes();
         Closing += (_, args) => { if (Model.RecipeBusy) { args.Cancel = true; Model.Notice = "Aguarde a operação da receita terminar antes de fechar."; } };
@@ -34,9 +38,10 @@ public partial class MainWindow : Window
     }
     private async void RecipeAction(string action)
     {
-        // Recheck permissions at the entry point. Profile selection is still a demo identity.
+        // Recheck the authenticated account at the operation entry point.
         var command = action == "Ativar receita" ? Model.ActivateRecipe : action == "Carregar foto de teste" ? Model.LoadTestPhoto : Model.EditRecipe;
         if (!command.CanExecute(action)) return;
+        Model.Access.Demand(AccessRules.RecipeAction(action));
         try
         {
             if (action == "Importar receita")
@@ -59,7 +64,7 @@ public partial class MainWindow : Window
                     nextVersion = checked(Model.Recipes.Where(r => r.Document.Id == selected.Document.Id).Max(r => r.Document.Version) + 1);
                     Model.RecipeBusy = false;
                 }
-                var editor = new RecipeEditorWindow(recipeStore, () => Model.CanEdit, original, nextVersion) { Owner = this };
+                var editor = new RecipeEditorWindow(recipeStore, () => Model.Access.Can(AccessRules.RecipeAction(action)), original, nextVersion, Model.Access.LoginName) { Owner = this };
                 if (editor.ShowDialog() == true && editor.Saved is LocalRecipe saved)
                 { ReloadRecipes(saved); Model.Page = 1; Model.Notice = $"Receita {saved.Display} salva. Você pode usá-la nesta estação ou exportar o pacote .aoireceita."; }
             }
@@ -79,7 +84,7 @@ public partial class MainWindow : Window
                 Model.RecipeBusy = true; Model.Notice = "Verificando referências e integridade…";
                 var files = await Task.Run(() => recipeStore.Load(selected));
                 Model.SetActive(selected, files); activeFiles = files;
-                Model.Notice = $"{selected.Display} ativa para testes com fotos. Julgamento automático e produção ainda não integrados.";
+                Model.Notice = $"{selected.Display} ativa para testes com fotos. Carregue uma foto para comparar as ROIs com as duas referências.";
             }
             else if (action == "Carregar foto de teste" && activeFiles is not null)
             {
@@ -87,23 +92,26 @@ public partial class MainWindow : Window
                 if (dialog.ShowDialog(this) != true) return;
                 Model.RecipeBusy = true;
                 Model.Notice = "Alinhando foto de teste à referência…";
-                var reference = activeFiles.Assembled;
-                var result = await Task.Run(() =>
-                {
-                    var bytes = RecipeImages.ReadPhoto(dialog.FileName);
-                    using var a = Cv2.ImDecode(bytes, ImreadModes.Color);
-                    using var r = Cv2.ImDecode(reference, ImreadModes.Color);
-                    using var alignment = new BoardAlignmentService().Align(r, a, new PrototypeOptions("", "", ""));
-                    double coverage = Cv2.CountNonZero(alignment.ValidAreaMask) / (double)(r.Width * r.Height);
-                    if (coverage < .75) throw new InvalidDataException("A foto cobre menos de 75% da referência. Verifique o enquadramento.");
-                    return (Image: RecipeImages.Bitmap(RecipeImages.Png(alignment.AlignedImage)), Error: alignment.MeanReprojectionErrorPixels);
+                var recipe = activeFiles;
+                var result = await Task.Run(() => {
+                    Model.Access.Demand("inspection.photo");
+                    return RecipeInspection.Inspect(recipe, RecipeImages.ReadPhoto(dialog.FileName));
                 });
-                Model.SetTestPhoto(result.Image, $"{Path.GetFileName(dialog.FileName)} • alinhada • erro médio {result.Error:F2} px. ROIs sobrepostas para conferência visual; sem decisão OK/NOK.");
-                Model.Notice = "Foto alinhada às ROIs da receita. Esta etapa confere o posicionamento; não calcula defeitos.";
+                Model.SetTestPhoto(RecipeImages.Bitmap(result.Aligned), $"{Path.GetFileName(dialog.FileName)} • erro {result.ErrorPixels:F2} px • comparação offline, sem liberação de produção.");
+                Model.Assessments.Clear(); foreach (var region in result.Regions) Model.Assessments.Add(region);
+                Model.Notice = $"{result.Regions.Count} ROIs avaliadas; {result.Regions.Count(r => r.Result == "REVISÃO MANUAL")} para revisão. Os critérios precisam ser calibrados com fotos reais.";
+
             }
         }
         catch (Exception ex) { Model.Notice = $"Operação não concluída: {ex.Message} A receita ativa anterior foi preservada."; }
         finally { Model.RecipeBusy = false; }
+    }
+    private void LogoutClick(object sender, RoutedEventArgs e)
+    {
+        if (Model.RecipeBusy) return;
+        Application.Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        Model.Access.Logout(); Close();
+        ((App)Application.Current).SignIn(Model.Access);
     }
     private void ExitClick(object sender, RoutedEventArgs e) => Close();
 }

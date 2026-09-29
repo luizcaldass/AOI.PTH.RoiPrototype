@@ -48,6 +48,7 @@ public sealed class RoiGenerator
             .ToList();
 
         List<Rect> merged = MergeNearby(candidates, options.MergeDistance, imageBounds)
+            .Where(rect => (long)rect.Width * rect.Height <= maximumArea)
             .OrderBy(rect => rect.Y)
             .ThenBy(rect => rect.X)
             .ToList();

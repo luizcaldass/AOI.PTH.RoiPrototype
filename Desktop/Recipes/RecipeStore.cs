@@ -1,3 +1,5 @@
+using AOI.PTH.Desktop.Security;
+using OpenCvSharp;
 using System.IO;
 using System.IO.Compression;
 using System.Security.Cryptography;
@@ -5,7 +7,7 @@ using System.Text.Json;
 
 namespace AOI.PTH.Desktop.Recipes;
 
-public sealed class RecipeStore(string root)
+public sealed class RecipeStore(string root, AccessService access)
 {
     public string Root { get; } = Path.GetFullPath(root);
     public static string DefaultRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AOI.PTH", "receitas");
@@ -16,6 +18,7 @@ public sealed class RecipeStore(string root)
 
     public IReadOnlyList<LocalRecipe> List(out string warnings)
     {
+        access.Demand("view.recipes");
         var list = new List<LocalRecipe>();
         var invalid = 0;
         if (Directory.Exists(Root)) foreach (string directory in Directory.EnumerateDirectories(Root).Where(d => !Path.GetFileName(d).StartsWith('.')))
@@ -28,19 +31,21 @@ public sealed class RecipeStore(string root)
                 if (Path.GetFileName(directory) != Key(document)) throw new InvalidDataException("Identificação da pasta inconsistente.");
                 list.Add(new(document, directory));
             }
-            catch (Exception ex) when (ex is IOException or JsonException or ArgumentException or UnauthorizedAccessException) { invalid++; }
+            catch (Exception ex) when (ex is InvalidDataException or IOException or JsonException or ArgumentException or UnauthorizedAccessException) { invalid++; }
         }
         warnings = invalid == 0 ? "" : $"{invalid} pasta(s) inválida(s) ignorada(s); nenhum arquivo foi apagado.";
         return list.OrderBy(x => x.Code).ThenByDescending(x => x.Document.Version).ToArray();
     }
     public LocalRecipe Save(RecipeFiles files)
     {
+        access.Demand(files.Document.Version == 1 ? "recipe.create" : "recipe.edit");
         ValidateFiles(files);
         var payload = MakePayload(files);
         return Install(payload);
     }
     public LocalRecipe Import(string package)
     {
+        access.Demand("recipe.import");
         if (!string.Equals(Path.GetExtension(package), ".aoireceita", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Selecione um arquivo .aoireceita.");
         using var stream = File.OpenRead(package);
         if (stream.Length > MaxTotal) throw new InvalidDataException("Pacote maior que 180 MB.");
@@ -64,6 +69,7 @@ public sealed class RecipeStore(string root)
     }
     public RecipeFiles Load(LocalRecipe item)
     {
+        access.Demand("view.recipes");
         var expected = Path.Combine(Root, Key(item.Document));
         if (!string.Equals(Path.GetFullPath(item.Directory), expected, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Receita fora da biblioteca local.");
         var payload = PayloadNames.Append(IntegrityName).ToDictionary(n => n, n => ReadBounded(Path.Combine(expected, n), Limit(n)));
@@ -71,6 +77,7 @@ public sealed class RecipeStore(string root)
     }
     public void Export(LocalRecipe item, string destination)
     {
+        access.Demand("recipe.export");
         var files = Load(item);
         if (!string.Equals(Path.GetExtension(destination), ".aoireceita", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("A extensão deve ser .aoireceita.");
         var full = Path.GetFullPath(destination);
@@ -93,7 +100,8 @@ public sealed class RecipeStore(string root)
         {
             var existing = new LocalRecipe(files.Document, target);
             var originalPayload = MakePayload(Load(existing));
-            if (!PayloadNames.All(n => payload[n].SequenceEqual(originalPayload[n])))
+            var incomingPayload = MakePayload(files);
+            if (!PayloadNames.All(n => incomingPayload[n].SequenceEqual(originalPayload[n])))
                 throw new InvalidDataException("Esta versão já existe com conteúdo diferente. Salve uma nova versão; a anterior não foi alterada.");
             return existing;
         }
@@ -141,6 +149,12 @@ public sealed class RecipeStore(string root)
             if (r is null || string.IsNullOrWhiteSpace(r.Reference) || r.Reference.Length > 50 || !references.Add(r.Reference.Trim()) || r.X < 0 || r.Y < 0 || r.Width < 2 || r.Height < 2 || (long)r.X + r.Width > d.Width || (long)r.Y + r.Height > d.Height)
                 throw new InvalidDataException("ROIs devem ter nomes únicos e dimensões válidas dentro da referência limpa.");
         }
+        foreach (var r in d.Rois)
+            if (!double.IsFinite(r.MinimumCoverage) || r.MinimumCoverage is < .90 or > 1 ||
+                !double.IsFinite(r.MinimumReferenceDifference) || r.MinimumReferenceDifference is < 1 or > 255 ||
+                !double.IsFinite(r.DecisionMargin) || r.DecisionMargin is <= 0 or >= 1 ||
+                !double.IsFinite(r.MaximumMatchDifference) || r.MaximumMatchDifference is < 1 or > 255)
+                throw new InvalidDataException("Critérios inválidos: cobertura 0,90–1; diferença mínima 1–255; margem maior que 0 e menor que 1; distância máxima 1–255.");
         if (d.Generation is null) throw new InvalidDataException("Parâmetros ausentes.");
         RecipeImages.ValidateSettings(d.Generation);
         var a = d.Alignment;
@@ -153,6 +167,17 @@ public sealed class RecipeStore(string root)
         foreach (byte[] image in new[] { files.Clean, files.Assembled, files.ValidMask })
             if (RecipeImages.Dimensions(image) != (files.Document.Width, files.Document.Height)) throw new InvalidDataException("Imagem incompatível com as coordenadas das ROIs.");
         RecipeImages.Dimensions(files.OriginalAssembled);
+        using var mask = Cv2.ImDecode(files.ValidMask, ImreadModes.Unchanged);
+        if (mask.Empty() || mask.Type() != MatType.CV_8UC1) throw new InvalidDataException("A área válida deve ser uma máscara PNG de um canal.");
+        using var intermediate = new Mat(); Cv2.InRange(mask, new Scalar(1), new Scalar(254), intermediate);
+        if (Cv2.CountNonZero(intermediate) != 0) throw new InvalidDataException("A máscara deve conter somente 0 e 255.");
+        double coverage = Cv2.CountNonZero(mask) / (double)(files.Document.Width * files.Document.Height);
+        if (Math.Abs(coverage - files.Document.Alignment!.Coverage) > .001) throw new InvalidDataException("Máscara e diagnóstico de cobertura inconsistentes.");
+        foreach (var roi in files.Document.Rois.Where(r => r.Enabled)) {
+            using var area = new Mat(mask, new Rect(roi.X, roi.Y, roi.Width, roi.Height));
+            if (Cv2.CountNonZero(area) / (double)(roi.Width * roi.Height) < roi.MinimumCoverage)
+                throw new InvalidDataException($"A ROI {roi.Reference} não tem cobertura suficiente. Ajuste a região ou refaça as fotos.");
+        }
     }
     public static string Key(RecipeDocument document) => $"{document.Id:N}-v{document.Version}";
     private static long Limit(string name) => name == IntegrityName ? 16 * 1024 : name == "receita.json" ? 1024 * 1024 : RecipeImages.MaxBytes;

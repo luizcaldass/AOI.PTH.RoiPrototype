@@ -1,9 +1,10 @@
-# Verificação da interface v0.2
+# Verificação v0.4
 
-- Compilada com SDK .NET 10.0.400, destino net10.0-windows: zero avisos e zero erros.
-- Console original recompilado com SDK .NET 8.0.424: zero avisos e zero erros.
-- 21 verificações de navegação, permissões, bloqueio de comandos, cancelamento, finalização e reinício da demonstração: aprovadas.
-- Nove renderizações WPF: sete abas, perfil Administrador e janela 1280 x 720.
-- Inspeção visual realizada sobre as capturas. Em janelas menores, o painel central tem rolagem e os controles de julgamento permanecem fixos.
+- Desktop net10.0-windows: SDK 10.0.401, zero avisos e erros.
+- Console net8.0: SDK 10.0.401 e referências .NET 8.0.31, zero avisos e erros.
+- 47 verificações aprovadas (incluindo cadastro unificado, edição individual, julgamento comum e proteção do último administrador): autenticação, senha/zeros, persistência, bloqueio, login único, último administrador, permissões de abas/comandos/serviços, desativação, integridade e receitas.
+- Fluxo completo com imagem sintética determinística: geração, gravação, reabertura, alinhamento e comparação.
+- 11 capturas WPF: sete abas, receita ativa, editor, cadastro unificado e login. Nova tela de cadastro unificado conferida visualmente.
+- Dados de teste isolados; cadastro e biblioteca reais não foram usados.
 
-Esta verificação cobre o protótipo de interface. Não valida autenticação real, SQL Server, integridade de receitas, inspeção de placas reais ou desempenho do ThinkCentre na linha. Esses módulos serão conectados e verificados nas próximas etapas.
+Não mede precisão em placas reais. Permanecem pendentes calibração com imagens reais, câmera, SQL Server, produção, persistência de inspeções e desempenho na estação.
